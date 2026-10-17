@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "express": "*",
+    "express": "^4.22.3",
     "mocha": "^10.2.0",
     "socket.io": "*"
   },
