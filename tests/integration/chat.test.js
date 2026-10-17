@@ -1,11 +1,17 @@
-// Pruebas de integracion BDD (Jest): servidor real + cliente Socket.IO real
+// Pruebas de integracion BDD (Jest): servidor real + una-lib real
+// - Supertest para la ruta HTTP (GET /)
+// - socket.io-client para el evento real de envio de mensajes
 const { io: ioClient } = require('socket.io-client');
-const http = require('http');
+const request = require('supertest');
+const unalib = require('../../libs/unalib');
 
 // silenciar los console.log de unalib durante las pruebas
 jest.spyOn(console, 'log').mockImplementation(() => {});
 
-const { http: server, io } = require('../server');
+// espia sobre la funcion real (no la reemplaza) para comprobar que el backend la llama
+const validateSpy = jest.spyOn(unalib, 'validateMessage');
+
+const { app, http: server, io } = require('../../server');
 
 let url;
 
@@ -42,10 +48,19 @@ async function enviarYRecibir(socket, payload) {
   return respuesta;
 }
 
+// comprueba que el backend paso el mensaje crudo por una-lib y reenvio su resultado
+function expectValidadoPorUnalib(payload, recibido) {
+  const crudo = JSON.stringify(payload);
+  expect(validateSpy).toHaveBeenCalledWith(crudo);
+  const llamada = validateSpy.mock.calls.findIndex((args) => args[0] === crudo);
+  expect(JSON.parse(validateSpy.mock.results[llamada].value)).toEqual(recibido);
+}
+
 describe('Feature: Chat UNA con contenido multimedia', () => {
   let cliente;
 
   beforeEach(async () => {
+    validateSpy.mockClear();
     cliente = await conectarCliente();
   });
 
@@ -53,19 +68,30 @@ describe('Feature: Chat UNA con contenido multimedia', () => {
     cliente.disconnect();
   });
 
-  describe('Scenario: el usuario abre la pagina del chat', () => {
-    test('Given el servidor esta corriendo, When se pide "/", Then devuelve el HTML del chat', async () => {
-      const html = await new Promise((resolve, reject) => {
-        http.get(`${url}/`, (res) => {
-          let body = '';
-          res.on('data', (c) => { body += c; });
-          res.on('end', () => resolve({ status: res.statusCode, body }));
-        }).on('error', reject);
-      });
+  describe('Scenario: el usuario abre la pagina del chat (Supertest)', () => {
+    test('Given el servidor esta corriendo, When se pide GET /, Then responde 200 con el HTML del chat', async () => {
+      const res = await request(app).get('/');
 
-      expect(html.status).toBe(200);
-      expect(html.body).toContain('<form');
-      expect(html.body).toContain('id="messages"');
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/text\/html/);
+      expect(res.text).toContain('<form');
+      expect(res.text).toContain('id="messages"');
+    });
+
+    test('Given el servidor esta corriendo, When se pide una ruta inexistente, Then responde 404', async () => {
+      const res = await request(app).get('/no-existe');
+
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('Scenario: el backend valida cada mensaje con una-lib', () => {
+    test('Given un usuario conectado, When envia un mensaje, Then el backend llama a validateMessage y reenvia su resultado', async () => {
+      const payload = { nombre: 'Ana', mensaje: 'https://image.com/a.png', color: '#000000' };
+      const msg = await enviarYRecibir(cliente, payload);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+      expectValidadoPorUnalib(payload, msg);
     });
   });
 
@@ -96,7 +122,10 @@ describe('Feature: Chat UNA con contenido multimedia', () => {
       'https://picsum.photos/400.jpg?grayscale',
       'https://cdn.com/animacion.gif',
     ])('Given un usuario conectado, When envia %s, Then se muestra como <img>', async (url) => {
-      const msg = await enviarYRecibir(cliente, { nombre: 'Ana', mensaje: url, color: '#000000' });
+      const payload = { nombre: 'Ana', mensaje: url, color: '#000000' };
+      const msg = await enviarYRecibir(cliente, payload);
+
+      expectValidadoPorUnalib(payload, msg);
 
       expect(msg.mensaje).toContain('<img');
       expect(msg.mensaje).toContain(`src="${url}"`);
@@ -110,7 +139,10 @@ describe('Feature: Chat UNA con contenido multimedia', () => {
       'https://video.com/clip.webm',
       'http://video.com/clip.ogg',
     ])('Given un usuario conectado, When envia %s, Then se inserta un reproductor <video controls>', async (url) => {
-      const msg = await enviarYRecibir(cliente, { nombre: 'Ana', mensaje: url, color: '#000000' });
+      const payload = { nombre: 'Ana', mensaje: url, color: '#000000' };
+      const msg = await enviarYRecibir(cliente, payload);
+
+      expectValidadoPorUnalib(payload, msg);
 
       expect(msg.mensaje).toMatch(/^<video [^>]*controls/);
       expect(msg.mensaje).toContain(`src="${url}"`);
@@ -121,7 +153,10 @@ describe('Feature: Chat UNA con contenido multimedia', () => {
       ['https://youtu.be/dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
       ['https://www.youtube.com/shorts/aqz-KE-bpKQ', 'aqz-KE-bpKQ'],
     ])('Given un usuario conectado, When envia el link de YouTube %s, Then se inserta el reproductor embebido', async (url, id) => {
-      const msg = await enviarYRecibir(cliente, { nombre: 'Ana', mensaje: url, color: '#000000' });
+      const payload = { nombre: 'Ana', mensaje: url, color: '#000000' };
+      const msg = await enviarYRecibir(cliente, payload);
+
+      expectValidadoPorUnalib(payload, msg);
 
       expect(msg.mensaje).toContain('<iframe');
       expect(msg.mensaje).toContain(`https://www.youtube.com/embed/${id}"`);
@@ -135,7 +170,10 @@ describe('Feature: Chat UNA con contenido multimedia', () => {
       '<iframe src="javascript:alert(1)"></iframe>',
       '<svg onload=alert(1)>',
     ])('Given un atacante conectado, When envia %s como mensaje, Then llega escapado y sin etiquetas HTML', async (ataque) => {
-      const msg = await enviarYRecibir(cliente, { nombre: 'Hacker', mensaje: ataque, color: '#000000' });
+      const payload = { nombre: 'Hacker', mensaje: ataque, color: '#000000' };
+      const msg = await enviarYRecibir(cliente, payload);
+
+      expectValidadoPorUnalib(payload, msg);
 
       expect(msg.mensaje).not.toMatch(/</);
       expect(msg.mensaje).toContain('&lt;');
@@ -158,7 +196,10 @@ describe('Feature: Chat UNA con contenido multimedia', () => {
       'javascript:alert(1)//.jpg',
       'http://x.com/video.mp4"><script>alert(1)</script>',
     ])('Given un atacante conectado, When disfraza un ataque como URL multimedia (%s), Then no se genera ninguna etiqueta', async (ataque) => {
-      const msg = await enviarYRecibir(cliente, { nombre: 'Hacker', mensaje: ataque, color: '#000000' });
+      const payload = { nombre: 'Hacker', mensaje: ataque, color: '#000000' };
+      const msg = await enviarYRecibir(cliente, payload);
+
+      expectValidadoPorUnalib(payload, msg);
 
       expect(msg.mensaje).not.toMatch(/<(img|video|iframe|script)/);
     });
