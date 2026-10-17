@@ -27,6 +27,10 @@ with `libs/unalib.js`, and broadcasts it to everyone.
 | `index.html` | Client. Inserts `msgJson.mensaje` with jQuery `.html()` — **so the server must already have sanitized it**. |
 | `test/*.js` | Mocha unit tests (BDD `describe`/`it`). |
 | `tests/integration/chat.test.js` | Jest integration tests (Supertest for HTTP, `socket.io-client` for the real chat event). |
+| `tests/e2e/chat.spec.js` | Playwright end-to-end tests (real browser + real server); BDD via `test.step('Given/When/Then …')`. |
+| `playwright.config.js` | `testDir: tests/e2e`, Chromium only, `webServer` runs `node server.js` on port 3100 (`E2E_PORT`). |
+| `repositorio.txt` | Lab deliverable: just the GitHub repo URL. |
+| `README.md` | Spanish setup + how to run the three suites (for graders). |
 
 ### Message flow
 
@@ -50,7 +54,8 @@ URL regexes exclude `\s " ' < > \``, which is what blocks attribute-breakout pay
 npm start                       # http://localhost:3000
 npm test                        # Mocha unit tests
 npm run test:integration        # Jest: tests/integration --runInBand --env=node --verbose
-npm run test:all                # both
+npm run test:e2e                # Playwright (starts the server itself on :3100)
+npm run test:all                # all three
 npx jest tests/integration --runInBand --env=node   # exact command from the lab
 ```
 
@@ -99,7 +104,11 @@ Shell: PowerShell 5.1 is primary (no `&&`; use `;` or `if ($?)`). Git Bash is al
 
 - **`gh` CLI is not installed.** The agent cannot create GitHub repos; ask the user to create it on github.com (empty, no README) and then `git remote set-url origin …` + `git push -u origin main`.
 - **Jest hides the per-test list when run by an AI agent** (it detects `AI_AGENT` / `CLAUDECODE` env vars) and prints only totals. The tests still run. To see the list yourself in Git Bash: `env -u CLAUDECODE -u AI_AGENT npx jest … --verbose`. In the user's own terminal it shows normally.
-- **Jest default `testMatch` would also pick up `*.spec.js` Mocha files.** `package.json` restricts it to `<rootDir>/tests/integration/**/*.test.js`. Keep Mocha in `test/`, Jest in `tests/integration/`.
+- **Jest default `testMatch` would also pick up `*.spec.js` Mocha/Playwright files.** `package.json` restricts it to `<rootDir>/tests/integration/**/*.test.js` and ignores `tests/e2e/` (lab requirement). Keep Mocha in `test/`, Jest in `tests/integration/`, Playwright in `tests/e2e/`. Verify with `npx jest --listTests` and `npx playwright test --list`.
+- **The lab is graded on three suites** (unit, integration, e2e) plus JPG screenshots and `repositorio.txt`; no Word/PDF. Before a submission, run all three and check each only runs its own files.
+- After a fresh clone, Playwright needs `npx playwright install chromium` (browsers are not in `node_modules`).
+- `index.html` loads the Socket.IO client from the server (`/socket.io/socket.io.js`), not a CDN — keeps e2e tests offline-safe for that script. jQuery 1.11.1 still comes from `code.jquery.com` (old version; candidate for an upgrade if asked).
+- In e2e XSS tests, listen for `page.on('dialog')` to prove no `alert()` ran, and assert the message renders as literal text.
 - **`npm install pkg@^x` does not upgrade a transitive dep that still satisfies the lockfile.** After bumping a parent, run `npm update <transitive>` and confirm with `npm ls <transitive>`.
 - **Mocha 12 requires Node `^20.19 || >=22.12`.** Current Node is 20.20.0.
 - Mocha root-level `before`/`after` in one spec file apply to all Mocha files.
@@ -112,9 +121,9 @@ Shell: PowerShell 5.1 is primary (no `&&`; use `;` or `if ($?)`). Git Bash is al
 ## 5. Current state (update every session)
 
 - Snyk (`--dev`): 0 critical, 0 high, 1 medium (deepmerge via jest), 0 low.
-- Tests: Mocha 94 passing; Jest 25 passing.
-- Deps: express ^4.22.3, socket.io ^4.8.4; dev: mocha ^12.0.3, jest ^30.5.2, supertest ^7.3.1, socket.io-client ^4.8.4.
-- Lab steps done: URL→image/video rendering, XSS prevention, Snyk critical+high fixes with BDD, unit tests (images/videos/injection), integration tests (step 9, evidencia 3).
+- Tests: Mocha 94 passing; Jest 25 passing; Playwright 10 passing.
+- Deps: express ^4.22.3, socket.io ^4.8.4; dev: mocha ^12.0.3, jest ^30.5.2, supertest ^7.3.1, socket.io-client ^4.8.4, @playwright/test ^1.64.1.
+- Lab steps done: URL→image/video rendering, XSS prevention, Snyk critical+high fixes with BDD, unit tests (images/videos/injection), integration tests (step 9, evidencia 3), e2e Playwright suite, `repositorio.txt`, README.
 
 ---
 
@@ -140,4 +149,5 @@ Never record secrets, tokens, OAuth URLs or personal data here.
 
 ### Session log
 
+- **2026-10-16 (b)** — Prepared submission: added Playwright e2e suite (`tests/e2e`, 10 BDD tests incl. XSS with dialog detection), `playwright.config.js` with webServer, Jest `testPathIgnorePatterns` for `tests/e2e`, `repositorio.txt`, Spanish README; switched Socket.IO client to the server-served script. Learned: lab is graded on three separate suites + JPGs + repo link.
 - **2026-10-16** — Published repo to `elein06/lab5-una-chat`; untracked `node_modules`. Implemented image/video/YouTube URL rendering in unalib and fixed XSS (escape text/name, validate color) plus the `phone` bug. Ran Snyk: fixed critical proxy-addr (CVE-2026-90711) red→green with BDD, then all highs by upgrading express/socket.io/mocha. Added Mocha unit tests (images, videos, injection) and Jest+Supertest+socket.io-client BDD integration tests in `tests/integration/chat.test.js`. Learned: no `gh`, Jest hides verbose for agents, `npm update` for transitive fixes.

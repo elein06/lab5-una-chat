@@ -7,15 +7,21 @@
     "start": "node server.js",
     "test": "mocha",
     "test:integration": "jest tests/integration --runInBand --env=node --verbose",
-    "test:all": "mocha && jest tests/integration --runInBand --env=node --verbose"
+    "test:e2e": "playwright test",
+    "test:all": "mocha && jest tests/integration --runInBand --env=node --verbose && playwright test"
   },
   "jest": {
     "testEnvironment": "node",
     "testMatch": [
       "<rootDir>/tests/integration/**/*.test.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/tests/e2e/"
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "jest": "^30.5.2",
     "mocha": "^12.0.3",
     "socket.io-client": "^4.8.4",
